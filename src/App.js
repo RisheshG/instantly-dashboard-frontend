@@ -63,7 +63,7 @@ function App() {
   const fetchCampaigns = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/campaigns', {
+      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -82,7 +82,7 @@ function App() {
   const fetchAnalytics = async (campaignId, startDate, endDate, setAnalytics) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/campaigns/analytics', {
+      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns/analytics', {
         params: {
           id: campaignId,
           start_date: startDate,
