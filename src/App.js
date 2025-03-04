@@ -3,6 +3,7 @@ import axios from 'axios';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import './App.css';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -18,6 +19,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 function App() {
   const [campaigns, setCampaigns] = useState([]);
@@ -38,11 +40,34 @@ function App() {
   const [error, setError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false); // Track if user is registering
 
+  const checkUserPermission = async (uid) => {
+    try {
+      const userDocRef = doc(db, 'allowedUsers', uid);
+      const userDoc = await getDoc(userDocRef);
+      return userDoc.exists(); // Returns true if the user is allowed
+    } catch (error) {
+      console.error('Error checking user permission:', error);
+      return false;
+    }
+  };
+
   // Check for a valid token in localStorage on initial load
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      setIsLoggedIn(true);
+      const checkPermission = async () => {
+        const user = auth.currentUser;
+        if (user) {
+          const isAllowed = await checkUserPermission(user.uid);
+          if (isAllowed) {
+            setIsLoggedIn(true);
+          } else {
+            localStorage.removeItem('token'); // Remove the token if the user is not allowed
+            setError('You do not have permission to access this application.');
+          }
+        }
+      };
+      checkPermission();
     }
   }, []);
 
@@ -63,9 +88,9 @@ function App() {
   const fetchCampaigns = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns', {
+      const response = await axios.get('http://localhost:5001/api/campaigns', {
         headers: {
-          Authorization: Bearer ${token},
+          Authorization: `Bearer ${token}`,
         },
       });
       console.log('Raw Campaigns Data from Backend:', response.data);
@@ -82,14 +107,14 @@ function App() {
   const fetchAnalytics = async (campaignId, startDate, endDate, setAnalytics) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns/analytics', {
+      const response = await axios.get('http://localhost:5001/api/campaigns/analytics', {
         params: {
           id: campaignId,
           start_date: startDate,
           end_date: endDate,
         },
         headers: {
-          Authorization: Bearer ${token},
+          Authorization: `Bearer ${token}`,
         },
       });
       console.log('Fetched Analytics Data:', response.data);
@@ -202,6 +227,16 @@ function App() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const token = await userCredential.user.getIdToken();
+      const uid = userCredential.user.uid;
+  
+      // Check if the user is allowed
+      const isAllowed = await checkUserPermission(uid);
+      if (!isAllowed) {
+        setError('You do not have permission to access this application.');
+        await auth.signOut(); // Log out the user if they are not allowed
+        return;
+      }
+  
       localStorage.setItem('token', token); // Store the token in localStorage
       setIsLoggedIn(true);
     } catch (err) {
@@ -246,6 +281,16 @@ function App() {
             {isRegistering ? 'Login here' : 'Register here'}
           </button>
         </p>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="auth-container">
+        <h2>Access Denied</h2>
+        <p className="error">{error}</p>
+        <button onClick={() => setIsLoggedIn(false)}>Go Back</button>
       </div>
     );
   }
