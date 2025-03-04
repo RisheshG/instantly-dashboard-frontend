@@ -79,9 +79,6 @@ function App() {
     }
   };
 
-  if (isAuthorized === null) return <p>Loading...</p>;
-  if (!isAuthorized) return <p>Access Denied</p>;
-
   const fetchAnalytics = async (campaignId, startDate, endDate, setAnalytics) => {
     try {
       const token = localStorage.getItem('token');
@@ -92,7 +89,7 @@ function App() {
           end_date: endDate,
         },
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: Bearer ${token},
         },
       });
       console.log('Fetched Analytics Data:', response.data);
