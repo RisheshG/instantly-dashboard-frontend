@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import './App.css';
 
 // Firebase configuration
@@ -18,6 +19,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 function App() {
   const [campaigns, setCampaigns] = useState([]);
@@ -32,52 +34,57 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [showDetailedSummary, setShowDetailedSummary] = useState(false);
   const [humanReadableSummary, setHumanReadableSummary] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // Track login state
+  const [isAuthorized, setIsAuthorized] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false); // Track if user is registering
-
-  // Check for a valid token in localStorage on initial load
+  
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      setIsLoggedIn(true);
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userRef = doc(db, "allowedUsers", user.uid);
+        const docSnap = await getDoc(userRef);
+
+        if (docSnap.exists() && docSnap.data().allowed === true) {
+          setIsAuthorized(true);
+        } else {
+          alert("Access Denied! You are not authorized.");
+          await signOut(auth);
+          setIsAuthorized(false);
+        }
+      } else {
+        setIsAuthorized(false);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (isAuthorized) {
       fetchCampaigns();
     }
-  }, [isLoggedIn]);
-
-  useEffect(() => {
-    if (analytics1 && analytics2) {
-      const summary = generateHumanReadableSummary(analytics1, analytics2);
-      setHumanReadableSummary(summary);
-      setShowDetailedSummary(true);
-    }
-  }, [analytics1, analytics2]);
+  }, [isAuthorized]);
 
   const fetchCampaigns = async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('Raw Campaigns Data from Backend:', response.data);
+
       if (Array.isArray(response.data)) {
         setCampaigns(response.data);
       } else {
-        console.error('Invalid campaign data format received:', response.data);
+        console.error('Invalid campaign data format:', response.data);
       }
     } catch (error) {
       console.error('Failed to fetch campaigns', error);
     }
   };
+
+  if (isAuthorized === null) return <p>Loading...</p>;
+  if (!isAuthorized) return <p>Access Denied</p>;
 
   const fetchAnalytics = async (campaignId, startDate, endDate, setAnalytics) => {
     try {
