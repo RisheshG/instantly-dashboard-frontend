@@ -10,7 +10,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAfRrclbpAoldfmaQ_sMcZGlhuYQyC-BlM",
   authDomain: "instantly-dashboard.firebaseapp.com",
   projectId: "instantly-dashboard",
-  storageBucket: "instantly-dashboard.firebasestorage.app",
+  storageBucket: "instantly-dashboard.appspot.com",
   messagingSenderId: "59598409473",
   appId: "1:59598409473:web:141fd317b60d7e59851500",
   measurementId: "G-562NWL4EZ7"
@@ -34,24 +34,23 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [showDetailedSummary, setShowDetailedSummary] = useState(false);
   const [humanReadableSummary, setHumanReadableSummary] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // Track login state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false); // Track if user is registering
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const checkUserPermission = async (uid) => {
     try {
       const userDocRef = doc(db, 'allowedUsers', uid);
       const userDoc = await getDoc(userDocRef);
-      return userDoc.exists(); // Returns true if the user is allowed
+      return userDoc.exists();
     } catch (error) {
       console.error('Error checking user permission:', error);
       return false;
     }
   };
 
-  // Check for a valid token in localStorage on initial load
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -62,8 +61,18 @@ function App() {
           if (isAllowed) {
             setIsLoggedIn(true);
           } else {
-            localStorage.removeItem('token'); // Remove the token if the user is not allowed
+            localStorage.removeItem('token');
             setError('You do not have permission to access this application.');
+          }
+        } else {
+          try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const newToken = await userCredential.user.getIdToken();
+            localStorage.setItem('token', newToken);
+            setIsLoggedIn(true);
+          } catch (err) {
+            localStorage.removeItem('token');
+            setError('Session expired. Please log in again.');
           }
         }
       };
@@ -88,7 +97,7 @@ function App() {
   const fetchCampaigns = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/campaigns', {
+      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -107,7 +116,7 @@ function App() {
   const fetchAnalytics = async (campaignId, startDate, endDate, setAnalytics) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/campaigns/analytics', {
+      const response = await axios.get('https://instantlydashboardbackend.onrender.com/api/campaigns/analytics', {
         params: {
           id: campaignId,
           start_date: startDate,
@@ -125,72 +134,89 @@ function App() {
   };
 
   const generateHumanReadableSummary = (campaign1, campaign2) => {
-    if (!campaign1 || !campaign2 || !campaign1[0] || !campaign2[0]) return '';
+    if (!campaign1 || !campaign2) return '';
 
-    const campaign1Data = campaign1[0];
-    const campaign2Data = campaign2[0];
+    let summary = `The comparison between ${campaign1['Campaign Name']} and ${campaign2['Campaign Name']} reveals the following insights:\n\n`;
 
-    let summary = `The comparison between ${campaign1Data['Campaign Name']} and ${campaign2Data['Campaign Name']} reveals the following insights:\n\n`;
-
-    // Compare Leads Count
-    if (campaign1Data['Leads Count'] > campaign2Data['Leads Count']) {
-      summary += `- ${campaign1Data['Campaign Name']} has more leads (${campaign1Data['Leads Count']}) compared to ${campaign2Data['Campaign Name']} (${campaign2Data['Leads Count']}).\n`;
-    } else if (campaign1Data['Leads Count'] < campaign2Data['Leads Count']) {
-      summary += `- ${campaign2Data['Campaign Name']} has more leads (${campaign2Data['Leads Count']}) compared to ${campaign1Data['Campaign Name']} (${campaign1Data['Leads Count']}).\n`;
+    // Compare New Prospects Contacted
+    if (campaign1['New Prospects Contacted'] > campaign2['New Prospects Contacted']) {
+      summary += `- ${campaign1['Campaign Name']} contacted more new prospects (${campaign1['New Prospects Contacted']}) compared to ${campaign2['Campaign Name']} (${campaign2['New Prospects Contacted']}).\n`;
+    } else if (campaign1['New Prospects Contacted'] < campaign2['New Prospects Contacted']) {
+      summary += `- ${campaign2['Campaign Name']} contacted more new prospects (${campaign2['New Prospects Contacted']}) compared to ${campaign1['Campaign Name']} (${campaign1['New Prospects Contacted']}).\n`;
     } else {
-      summary += `- Both campaigns have the same number of leads (${campaign1Data['Leads Count']}).\n`;
+      summary += `- Both campaigns contacted the same number of new prospects (${campaign1['New Prospects Contacted']}).\n`;
     }
 
-    // Compare Contacted Count
-    if (campaign1Data['Contacted Count'] > campaign2Data['Contacted Count']) {
-      summary += `- ${campaign1Data['Campaign Name']} contacted more leads (${campaign1Data['Contacted Count']}) compared to ${campaign2Data['Campaign Name']} (${campaign2Data['Contacted Count']}).\n`;
-    } else if (campaign1Data['Contacted Count'] < campaign2Data['Contacted Count']) {
-      summary += `- ${campaign2Data['Campaign Name']} contacted more leads (${campaign2Data['Contacted Count']}) compared to ${campaign1Data['Campaign Name']} (${campaign1Data['Contacted Count']}).\n`;
+    // Compare Total Emails Sent
+    if (campaign1['Total Emails Sent'] > campaign2['Total Emails Sent']) {
+      summary += `- ${campaign1['Campaign Name']} sent more emails (${campaign1['Total Emails Sent']}) compared to ${campaign2['Campaign Name']} (${campaign2['Total Emails Sent']}).\n`;
+    } else if (campaign1['Total Emails Sent'] < campaign2['Total Emails Sent']) {
+      summary += `- ${campaign2['Campaign Name']} sent more emails (${campaign2['Total Emails Sent']}) compared to ${campaign1['Campaign Name']} (${campaign1['Total Emails Sent']}).\n`;
     } else {
-      summary += `- Both campaigns contacted the same number of leads (${campaign1Data['Contacted Count']}).\n`;
+      summary += `- Both campaigns sent the same number of emails (${campaign1['Total Emails Sent']}).\n`;
     }
 
-    // Compare Emails Sent Count
-    if (campaign1Data['Emails Sent Count'] > campaign2Data['Emails Sent Count']) {
-      summary += `- ${campaign1Data['Campaign Name']} sent more emails (${campaign1Data['Emails Sent Count']}) compared to ${campaign2Data['Campaign Name']} (${campaign2Data['Emails Sent Count']}).\n`;
-    } else if (campaign1Data['Emails Sent Count'] < campaign2Data['Emails Sent Count']) {
-      summary += `- ${campaign2Data['Campaign Name']} sent more emails (${campaign2Data['Emails Sent Count']}) compared to ${campaign1Data['Campaign Name']} (${campaign1Data['Emails Sent Count']}).\n`;
+    // Compare Delivered Emails
+    if (campaign1['Delivered'] > campaign2['Delivered']) {
+      summary += `- ${campaign1['Campaign Name']} delivered more emails (${campaign1['Delivered']}) compared to ${campaign2['Campaign Name']} (${campaign2['Delivered']}).\n`;
+    } else if (campaign1['Delivered'] < campaign2['Delivered']) {
+      summary += `- ${campaign2['Campaign Name']} delivered more emails (${campaign2['Delivered']}) compared to ${campaign1['Campaign Name']} (${campaign1['Delivered']}).\n`;
     } else {
-      summary += `- Both campaigns sent the same number of emails (${campaign1Data['Emails Sent Count']}).\n`;
+      summary += `- Both campaigns delivered the same number of emails (${campaign1['Delivered']}).\n`;
     }
 
-    // Compare New Leads Contacted Count
-    if (campaign1Data['New Leads Contacted Count'] > campaign2Data['New Leads Contacted Count']) {
-      summary += `- ${campaign1Data['Campaign Name']} contacted more new leads (${campaign1Data['New Leads Contacted Count']}) compared to ${campaign2Data['Campaign Name']} (${campaign2Data['New Leads Contacted Count']}).\n`;
-    } else if (campaign1Data['New Leads Contacted Count'] < campaign2Data['New Leads Contacted Count']) {
-      summary += `- ${campaign2Data['Campaign Name']} contacted more new leads (${campaign2Data['New Leads Contacted Count']}) compared to ${campaign1Data['Campaign Name']} (${campaign1Data['New Leads Contacted Count']}).\n`;
+    // Compare Mails Opened
+    if (campaign1['Mails Opened'] > campaign2['Mails Opened']) {
+      summary += `- ${campaign1['Campaign Name']} had more emails opened (${campaign1['Mails Opened']}) compared to ${campaign2['Campaign Name']} (${campaign2['Mails Opened']}).\n`;
+    } else if (campaign1['Mails Opened'] < campaign2['Mails Opened']) {
+      summary += `- ${campaign2['Campaign Name']} had more emails opened (${campaign2['Mails Opened']}) compared to ${campaign1['Campaign Name']} (${campaign1['Mails Opened']}).\n`;
     } else {
-      summary += `- Both campaigns contacted the same number of new leads (${campaign1Data['New Leads Contacted Count']}).\n`;
+      summary += `- Both campaigns had the same number of emails opened (${campaign1['Mails Opened']}).\n`;
     }
 
     // Compare Open Rate
-    const openRate1 = parseFloat(campaign1Data['Open Rate (%)']);
-    const openRate2 = parseFloat(campaign2Data['Open Rate (%)']);
-
-    if (!isNaN(openRate1) && !isNaN(openRate2)) {
-      if (openRate1 > openRate2) {
-        summary += `- ${campaign1Data['Campaign Name']} had a higher open rate (${openRate1.toFixed(2)}%) compared to ${campaign2Data['Campaign Name']} (${openRate2.toFixed(2)}%).\n`;
-      } else if (openRate1 < openRate2) {
-        summary += `- ${campaign2Data['Campaign Name']} had a higher open rate (${openRate2.toFixed(2)}%) compared to ${campaign1Data['Campaign Name']} (${openRate1.toFixed(2)}%).\n`;
-      } else {
-        summary += `- Both campaigns had the same open rate (${openRate1.toFixed(2)}%).\n`;
-      }
+    if (campaign1['Open Rate (%)'] > campaign2['Open Rate (%)']) {
+      summary += `- ${campaign1['Campaign Name']} had a higher open rate (${campaign1['Open Rate (%)']}%) compared to ${campaign2['Campaign Name']} (${campaign2['Open Rate (%)']}%).\n`;
+    } else if (campaign1['Open Rate (%)'] < campaign2['Open Rate (%)']) {
+      summary += `- ${campaign2['Campaign Name']} had a higher open rate (${campaign2['Open Rate (%)']}%) compared to ${campaign1['Campaign Name']} (${campaign1['Open Rate (%)']}%).\n`;
     } else {
-      summary += `- Open rate data is missing or invalid for one or both campaigns.\n`;
+      summary += `- Both campaigns had the same open rate (${campaign1['Open Rate (%)']}%).\n`;
     }
 
-    // Compare Reply Count
-    if (campaign1Data['Reply Count'] > campaign2Data['Reply Count']) {
-      summary += `- ${campaign1Data['Campaign Name']} received more replies (${campaign1Data['Reply Count']}) compared to ${campaign2Data['Campaign Name']} (${campaign2Data['Reply Count']}).\n`;
-    } else if (campaign1Data['Reply Count'] < campaign2Data['Reply Count']) {
-      summary += `- ${campaign2Data['Campaign Name']} received more replies (${campaign2Data['Reply Count']}) compared to ${campaign1Data['Campaign Name']} (${campaign1Data['Reply Count']}).\n`;
+    // Compare Responded
+    if (campaign1['Responded'] > campaign2['Responded']) {
+      summary += `- ${campaign1['Campaign Name']} received more replies (${campaign1['Responded']}) compared to ${campaign2['Campaign Name']} (${campaign2['Responded']}).\n`;
+    } else if (campaign1['Responded'] < campaign2['Responded']) {
+      summary += `- ${campaign2['Campaign Name']} received more replies (${campaign2['Responded']}) compared to ${campaign1['Campaign Name']} (${campaign1['Responded']}).\n`;
     } else {
-      summary += `- Both campaigns received the same number of replies (${campaign1Data['Reply Count']}).\n`;
+      summary += `- Both campaigns received the same number of replies (${campaign1['Responded']}).\n`;
+    }
+
+    // Compare Reply Rate
+    if (campaign1['Reply Rate (%)'] > campaign2['Reply Rate (%)']) {
+      summary += `- ${campaign1['Campaign Name']} had a higher reply rate (${campaign1['Reply Rate (%)']}%) compared to ${campaign2['Campaign Name']} (${campaign2['Reply Rate (%)']}%).\n`;
+    } else if (campaign1['Reply Rate (%)'] < campaign2['Reply Rate (%)']) {
+      summary += `- ${campaign2['Campaign Name']} had a higher reply rate (${campaign2['Reply Rate (%)']}%) compared to ${campaign1['Campaign Name']} (${campaign1['Reply Rate (%)']}%).\n`;
+    } else {
+      summary += `- Both campaigns had the same reply rate (${campaign1['Reply Rate (%)']}%).\n`;
+    }
+
+    // Compare Bounced
+    if (campaign1['Bounced'] > campaign2['Bounced']) {
+      summary += `- ${campaign1['Campaign Name']} had more bounced emails (${campaign1['Bounced']}) compared to ${campaign2['Campaign Name']} (${campaign2['Bounced']}).\n`;
+    } else if (campaign1['Bounced'] < campaign2['Bounced']) {
+      summary += `- ${campaign2['Campaign Name']} had more bounced emails (${campaign2['Bounced']}) compared to ${campaign1['Campaign Name']} (${campaign1['Bounced']}).\n`;
+    } else {
+      summary += `- Both campaigns had the same number of bounced emails (${campaign1['Bounced']}).\n`;
+    }
+
+    // Compare Bounce Rate
+    if (campaign1['Bounce Rate (%)'] > campaign2['Bounce Rate (%)']) {
+      summary += `- ${campaign1['Campaign Name']} had a higher bounce rate (${campaign1['Bounce Rate (%)']}%) compared to ${campaign2['Campaign Name']} (${campaign2['Bounce Rate (%)']}%).\n`;
+    } else if (campaign1['Bounce Rate (%)'] < campaign2['Bounce Rate (%)']) {
+      summary += `- ${campaign2['Campaign Name']} had a higher bounce rate (${campaign2['Bounce Rate (%)']}%) compared to ${campaign1['Campaign Name']} (${campaign1['Bounce Rate (%)']}%).\n`;
+    } else {
+      summary += `- Both campaigns had the same bounce rate (${campaign1['Bounce Rate (%)']}%).\n`;
     }
 
     return summary;
@@ -228,16 +254,15 @@ function App() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const token = await userCredential.user.getIdToken();
       const uid = userCredential.user.uid;
-  
-      // Check if the user is allowed
+
       const isAllowed = await checkUserPermission(uid);
       if (!isAllowed) {
         setError('You do not have permission to access this application.');
-        await auth.signOut(); // Log out the user if they are not allowed
+        await auth.signOut();
         return;
       }
-  
-      localStorage.setItem('token', token); // Store the token in localStorage
+
+      localStorage.setItem('token', token);
       setIsLoggedIn(true);
     } catch (err) {
       setError(err.message);
@@ -245,7 +270,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token'); // Remove the token from localStorage
+    localStorage.removeItem('token');
     setIsLoggedIn(false);
   };
 
@@ -284,7 +309,7 @@ function App() {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="auth-container">
@@ -337,7 +362,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analytics1[0]).map(([key, value]) => (
+                  {Object.entries(analytics1).map(([key, value]) => (
                     <tr key={key}>
                       <td>{key}</td>
                       <td>{value}</td>
@@ -380,7 +405,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analytics2[0]).map(([key, value]) => (
+                  {Object.entries(analytics2).map(([key, value]) => (
                     <tr key={key}>
                       <td>{key}</td>
                       <td>{value}</td>
@@ -407,11 +432,11 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(analytics1[0]).map(([key]) => (
+              {Object.entries(analytics1).map(([key]) => (
                 <tr key={key}>
                   <td>{key}</td>
-                  <td>{analytics1[0][key]}</td>
-                  <td>{analytics2[0][key]}</td>
+                  <td>{analytics1[key]}</td>
+                  <td>{analytics2[key]}</td>
                 </tr>
               ))}
             </tbody>
